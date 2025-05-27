@@ -201,6 +201,43 @@ class Fire(Object):
         if self.animation_count // self.ANIMATION_DELAY > len(sprites):
             self.animation_count = 0
 
+class Portal(Object):
+    ANIMATION_DELAY = 6
+
+    def __init__(self, x, y, width, height):
+        super().__init__(x, y, width, height, "portal")
+        self.portal = load_sprite_sheets("Traps", "Portal", width, height)
+        self.image = self.portal["glow"][0]
+        # self.mask = pygame.mask.from_surface(self.image)
+        self.mask = pygame.mask.Mask((0,0))
+        self.animation_count = 0
+
+    def check(self, player, offset_x):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_UP]:
+
+            if (self.rect.x < player.rect.x) and \
+               (self.rect.y < player.rect.y) and \
+               (self.rect.x+self.rect.w >= player.rect.x + player.rect.w) and \
+               (self.rect.y+self.rect.h >= player.rect.y + player.rect.h):
+                player.rect.x = 100
+                player.rect.y = 100
+                offset_x = 0
+        return offset_x
+
+    def loop(self):
+        sprites = self.portal["glow"]
+        sprite_index = (self.animation_count //
+                        self.ANIMATION_DELAY) % len(sprites)
+        self.image = sprites[sprite_index]
+        self.animation_count += 1
+
+        self.rect = self.image.get_rect(topleft=(self.rect.x, self.rect.y))
+        # self.mask = pygame.mask.from_surface(self.image)
+
+        if self.animation_count // self.ANIMATION_DELAY > len(sprites):
+            self.animation_count = 0
+
 
 def get_background(name):
     image = pygame.image.load(join("assets", "Background", name))
@@ -286,10 +323,12 @@ def main(window):
     player = Player(100, 100, 50, 50)
     fire = Fire(100, HEIGHT - block_size - 64, 16, 32)
     fire.on()
+    portal = Portal(1000, HEIGHT-2*block_size,48,48)
     floor = [Block(i * block_size, HEIGHT - block_size, block_size)
              for i in range(-WIDTH // block_size, (WIDTH * 2) // block_size)]
     objects = [*floor, Block(0, HEIGHT - block_size * 2, block_size),
-               Block(block_size * 3, HEIGHT - block_size * 4, block_size), fire]
+               fire,
+               portal]
 
     offset_x = 0
     scroll_area_width = 200
@@ -309,7 +348,9 @@ def main(window):
 
         player.loop(FPS)
         fire.loop()
+        portal.loop()
         handle_move(player, objects)
+        offset_x = portal.check(player,offset_x)
         draw(window, background, bg_image, player, objects, offset_x)
 
         if ((player.rect.right - offset_x >= WIDTH - scroll_area_width) and player.x_vel > 0) or (
