@@ -2,6 +2,8 @@ import os
 import random
 import math
 import pygame
+import LdtkJson
+import json
 from os import listdir
 from os.path import isfile, join
 pygame.init()
@@ -13,7 +15,6 @@ FPS = 60
 PLAYER_VEL = 5
 
 window = pygame.display.set_mode((WIDTH, HEIGHT))
-
 
 def flip(sprites):
     return [pygame.transform.flip(sprite, True, False) for sprite in sprites]
@@ -62,10 +63,9 @@ def get_block(size, type="grass_block"):
 class Player(pygame.sprite.Sprite):
     COLOR = (255, 0, 0)
     GRAVITY = 1
-    SPRITES = load_sprite_sheets("MainCharacters", "MaskDude", 32, 32, True)
     ANIMATION_DELAY = 3
 
-    def __init__(self, x, y, width, height):
+    def __init__(self, x, y, width, height, char_name):
         super().__init__()
         self.rect = pygame.Rect(x, y, width, height)
         self.x_vel = 0
@@ -77,6 +77,7 @@ class Player(pygame.sprite.Sprite):
         self.jump_count = 0
         self.hit = False
         self.hit_count = 0
+        self.SPRITES = load_sprite_sheets("MainCharacters", char_name, 32, 32, True)
 
     def jump(self):
         self.y_vel = -self.GRAVITY * 8
@@ -170,12 +171,24 @@ class Object(pygame.sprite.Sprite):
 
 
 class Block(Object):
-    def __init__(self, x, y, size):
+    def __init__(self, x, y, size, type="grass_block"):
         super().__init__(x, y, size, size)
-        block = get_block(size)
+        block = get_block(size, type=type)
         self.image.blit(block, (0, 0))
         self.mask = pygame.mask.from_surface(self.image)
 
+class Block2(Object):
+    def __init__(self, offset_x, offset_y, size, tileset_path, tile):
+        x = offset_x + tile.px[0]
+        y = offset_y + tile.px[1]
+        super().__init__(x, y, size, size)
+        image = pygame.image.load(tileset_path).convert_alpha()
+        surface = pygame.Surface((size, size), pygame.SRCALPHA, 32)
+        rect = pygame.Rect(tile.src[0], tile.src[1], size, size)
+        surface.blit(image, (0, 0), rect)
+        block = pygame.transform.flip(surface, tile.f & 1 << 0 != 0, tile.f & 1 << 1 != 0)
+        self.image.blit(block, (0, 0))
+        self.mask = pygame.mask.from_surface(self.image)  
 
 class Fire(Object):
     ANIMATION_DELAY = 3
@@ -210,26 +223,31 @@ class Fire(Object):
 class Portal(Object):
     ANIMATION_DELAY = 6
 
-    def __init__(self, x, y, width, height):
+    def __init__(self, x, y, width, height, dest):
         super().__init__(x, y, width, height, "portal")
         self.portal = load_sprite_sheets("Traps", "Portal", width, height)
         self.image = self.portal["glow"][0]
         # self.mask = pygame.mask.from_surface(self.image)
         self.mask = pygame.mask.Mask((0,0))
         self.animation_count = 0
+        self.dest_x = dest[0]
+        self.dest_y = dest[1]
 
-    def check(self, player, offset_x):
+    def check(self, player, up_key_is_ready, offset_x):
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_UP]:
+        pxbuf_x = 3*player.rect.w//4
+        pxbuf_y = 3*player.rect.h//4
+        if up_key_is_ready and keys[pygame.K_UP]:
 
-            if (self.rect.x < player.rect.x) and \
-               (self.rect.y < player.rect.y) and \
-               (self.rect.x+self.rect.w >= player.rect.x + player.rect.w) and \
-               (self.rect.y+self.rect.h >= player.rect.y + player.rect.h):
-                player.rect.x = 100
-                player.rect.y = 100
-                offset_x = 0
-        return offset_x
+            if (self.rect.x - pxbuf_x < player.rect.x) and \
+               (self.rect.y - pxbuf_y < player.rect.y) and \
+               (self.rect.x+self.rect.w + pxbuf_x >= player.rect.x + player.rect.w) and \
+               (self.rect.y+self.rect.h + pxbuf_y >= player.rect.y + player.rect.h):
+                player.rect.x = self.dest_x
+                player.rect.y = self.dest_y
+                offset_x = self.dest_x - WIDTH//2
+                up_key_is_ready = False
+        return up_key_is_ready,offset_x
 
     def loop(self):
         sprites = self.portal["glow"]
@@ -317,30 +335,73 @@ def handle_move(player, objects):
 
     for obj in to_check:
         if obj and obj.name == "fire":
-            player.make_hit()
+            if obj.animation_name == "on":
+                player.make_hit()
+    
 
+def get_pair_portal(entity_ref, level):
+    entref = LdtkJson.ReferenceToAnEntityInstance.from_dict(entity_ref)
+    level_layers = {layer.iid: layer for layer in level.layer_instances}
+    layer = level_layers[entref.layer_iid]
+    entities = {entity.iid: entity for entity in layer.entity_instances}
+    entity = entities[entref.entity_iid]
+    return [entity.px[0] + layer.px_total_offset_x, entity.px[1] + layer.px_total_offset_y]
 
 def main(window):
     clock = pygame.time.Clock()
-    background, bg_image = get_background("Blue.png")
+    
 
     block_size = 96
 
-    player = Player(100, 100, 50, 50)
+    with open("levels.json", 'r') as infl:
+        ldtkworld = LdtkJson.ldtk_json_from_dict(json.load(infl))
+    print(f"N levels: {len(ldtkworld.levels)}")
+    HEIGHT = ldtkworld.levels[0].px_hei
+    # WIDTH = ldtkworld.levels[0].px_wid
+    print(f"N layers: {len(ldtkworld.levels[0].layer_instances)}")
+    background, bg_image = get_background("Blue.png")
+    tileset_defs = {ts.uid: ts for ts in ldtkworld.defs.tilesets}
+
+    tiles = []
+    for layer_instance in ldtkworld.levels[0].layer_instances:
+        if layer_instance.type == "Tiles":
+            tileset_def = tileset_defs[layer_instance.tileset_def_uid]
+            tile_size = tileset_def.tile_grid_size
+            tiles.extend([Block2(layer_instance.px_total_offset_x, layer_instance.px_total_offset_y, tile_size, layer_instance.tileset_rel_path, grid_tile)
+                            for grid_tile in layer_instance.grid_tiles])
+    
+    player_skin = "MaskDude"
+    #player_skin = "GreenMan"
+    player = None
+    portals = []
+    for layer_instance in ldtkworld.levels[0].layer_instances:
+        if layer_instance.type == "Entities":
+            for entity in layer_instance.entity_instances:
+                if entity.identifier == "PlayerStart":
+                    player = Player(entity.px[0]+layer_instance.px_total_offset_x, entity.px[1]+layer_instance.px_total_offset_y, 50, 50, player_skin)
+                elif "Portal" in entity.tags:
+                    entity_fields = {ef.identifier: ef for ef in entity.field_instances}
+                    # For now we only link portals within a level
+                    portals.append(Portal(entity.px[0]+layer_instance.px_total_offset_x, entity.px[1]+layer_instance.px_total_offset_y,48,48,
+                                          get_pair_portal(entity_fields["Entity_ref"].value, ldtkworld.levels[0])))
+
     fire = Fire(100, HEIGHT - block_size - 64, 16, 32)
     fire.on()
-    portal = Portal(1000, HEIGHT-2*block_size,48,48)
-    floor = [Block(i * block_size, HEIGHT - block_size, block_size)
-             for i in range(-WIDTH // block_size, (WIDTH * 2) // block_size)]
-    objects = [*floor, Block(0, HEIGHT - block_size * 2, block_size),
-               Block(block_size * 3, HEIGHT - block_size * 4, block_size),
-               fire,
-               portal]
+    # portal = Portal(1000, HEIGHT-2*block_size,48,48)
+    # floor = [Block(i * block_size, HEIGHT - block_size, block_size)
+    #          for i in range(-WIDTH // block_size, (WIDTH * 2) // block_size)]
+    # objects = [*floor, Block(0, HEIGHT - block_size * 2, block_size),
+    #            Block(block_size * 3, HEIGHT - block_size * 4, block_size),
+    #            Block(block_size * 5, HEIGHT - block_size * 4, block_size/2, type="redbrick_block"),
+            #    fire,
+            #    portal]
+    objects = [*tiles, fire, *portals]
 
     offset_x = 0
     scroll_area_width = 200
 
     run = True
+    up_key_is_ready = True
     while run:
         clock.tick(FPS)
 
@@ -355,9 +416,14 @@ def main(window):
 
         player.loop(FPS)
         fire.loop()
-        portal.loop()
+        for portal in portals:
+            portal.loop()
         handle_move(player, objects)
-        offset_x = portal.check(player,offset_x)
+        if up_key_is_ready:
+            for portal in portals:
+                up_key_is_ready,offset_x = portal.check(player,up_key_is_ready,offset_x)
+        else:
+            up_key_is_ready = not pygame.key.get_pressed()[pygame.K_UP]
         draw(window, background, bg_image, player, objects, offset_x)
 
         if ((player.rect.right - offset_x >= WIDTH - scroll_area_width) and player.x_vel > 0) or (
