@@ -44,13 +44,19 @@ def load_sprite_sheets(dir1, dir2, width, height, direction=False):
     return all_sprites
 
 
-def get_block(size):
+def get_block(size, type="grass_block"):
     path = join("assets", "Terrain", "Terrain.png")
     image = pygame.image.load(path).convert_alpha()
     surface = pygame.Surface((size, size), pygame.SRCALPHA, 32)
-    rect = pygame.Rect(96, 0, size, size)
+    if type == "grass_block":
+        rect = pygame.Rect(96, 0, size, size)
+    elif type == "redbrick_block":
+        rect = pygame.Rect(272, 64, size, size)
     surface.blit(image, (0, 0), rect)
-    return pygame.transform.scale2x(surface)
+    if size == 96:
+        return pygame.transform.scale2x(surface)
+    else:
+        return surface
 
 
 class Player(pygame.sprite.Sprite):
