@@ -146,6 +146,10 @@ class Player(pygame.sprite.Sprite):
             if self.hearts[i].state > 0:
                 self.hearts[i].state -= 1
                 break
+
+    def reset_damage(self):
+        for heart in self.hearts:
+            heart.state = 2
     
     def get_hp(self):
         return sum([heart.state for heart in self.hearts])
@@ -505,6 +509,14 @@ def main(window):
                 elif event.key == pygame.K_k and pygame.key.get_mods() & pygame.KMOD_CTRL:
                     for heart in player.hearts:
                         heart.state = 0
+                elif event.key == pygame.K_RETURN:
+                    if player.get_hp() == 0 and dimmer_counter > dimmer_length:
+                        player.rect.x = player_start_x
+                        player.rect.y = player_start_y
+                        offset_x = 0
+                        frozen = False
+                        player.reset_damage()
+                        dimmer_counter = 0
 
         if not frozen:
             player.loop(FPS)
