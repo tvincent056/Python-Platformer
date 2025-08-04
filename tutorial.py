@@ -77,6 +77,7 @@ class Player(pygame.sprite.Sprite):
         self.jump_count = 0
         self.hit = False
         self.hit_count = 0
+        self.hearts = [Heart(10+34*x, 10) for x in range(3)]
         self.SPRITES = load_sprite_sheets("MainCharacters", char_name, 32, 32, True)
 
     def jump(self):
@@ -105,6 +106,15 @@ class Player(pygame.sprite.Sprite):
             self.direction = "right"
             self.animation_count = 0
 
+    def add_damage(self):
+        for i in range(len(self.hearts)-1,-1,-1):
+            if self.hearts[i].state > 0:
+                self.hearts[i].state -= 1
+                break
+    
+    def get_hp(self):
+        return sum([heart.state for heart in self.hearts])
+
     def loop(self, fps):
         self.y_vel += min(1, (self.fall_count / fps) * self.GRAVITY)
         self.move(self.x_vel, self.y_vel)
@@ -114,6 +124,7 @@ class Player(pygame.sprite.Sprite):
         if self.hit_count > fps * 2:
             self.hit = False
             self.hit_count = 0
+            self.add_damage()
 
         self.fall_count += 1
         self.update_sprite()
@@ -148,6 +159,8 @@ class Player(pygame.sprite.Sprite):
         self.sprite = sprites[sprite_index]
         self.animation_count += 1
         self.update()
+        for heart in self.hearts:
+            heart.update_sprite()
 
     def update(self):
         self.rect = self.sprite.get_rect(topleft=(self.rect.x, self.rect.y))
@@ -155,7 +168,8 @@ class Player(pygame.sprite.Sprite):
 
     def draw(self, win, offset_x):
         win.blit(self.sprite, (self.rect.x - offset_x, self.rect.y))
-
+        for heart in self.hearts:
+            heart.draw(win)
 
 class Object(pygame.sprite.Sprite):
     def __init__(self, x, y, width, height, name=None):
