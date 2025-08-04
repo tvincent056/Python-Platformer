@@ -6,6 +6,41 @@ import LdtkJson
 import json
 from os import listdir
 from os.path import isfile, join
+
+class Dimmer:
+    def __init__(self, keepalive=0):
+        self.keepalive=keepalive
+        if self.keepalive:
+            self.buffer=pygame.Surface(pygame.display.get_surface().get_size())
+        else:
+            self.buffer=None
+        self.darken_factor=0
+        
+    def dim(self, darken_factor=64, color_filter=(0,0,0)):
+        if not self.keepalive:
+            self.buffer=pygame.Surface(pygame.display.get_surface().get_size())
+        self.buffer.blit(pygame.display.get_surface(),(0,0))
+        if darken_factor>0:
+            self.darken_factor=darken_factor
+            darken=pygame.Surface(pygame.display.get_surface().get_size())
+            darken.fill(color_filter)
+            darken.set_alpha(darken_factor)
+            # safe old clipping rectangle...
+            old_clip=pygame.display.get_surface().get_clip()
+            # ..blit over entire screen...
+            pygame.display.get_surface().blit(darken,(0,0))
+            pygame.display.flip()
+            # ... and restore clipping
+            pygame.display.get_surface().set_clip(old_clip)
+
+    def undim(self):
+        self.darken_factor=0
+        if self.buffer is not None:
+            pygame.display.get_surface().blit(self.buffer,(0,0))
+            pygame.display.flip()
+            if not self.keepalive:
+                self.buffer=None
+
 pygame.init()
 
 pygame.display.set_caption("Platformer")
@@ -417,15 +452,19 @@ def main(window):
             tiles.extend([Block2(layer_instance.px_total_offset_x, layer_instance.px_total_offset_y, tile_size, layer_instance.tileset_rel_path, grid_tile)
                             for grid_tile in layer_instance.grid_tiles])
     
-    player_skin = "MaskDude"
-    #player_skin = "GreenMan"
+    #player_skin = "MaskDude"
+    player_skin = "GreenMan"
     player = None
     portals = []
+    player_start_x = None
+    player_start_y = None
     for layer_instance in ldtkworld.levels[0].layer_instances:
         if layer_instance.type == "Entities":
             for entity in layer_instance.entity_instances:
                 if entity.identifier == "PlayerStart":
-                    player = Player(entity.px[0]+layer_instance.px_total_offset_x, entity.px[1]+layer_instance.px_total_offset_y, 50, 50, player_skin)
+                    player_start_x = entity.px[0]+layer_instance.px_total_offset_x
+                    player_start_y = entity.px[1]+layer_instance.px_total_offset_y
+                    player = Player(player_start_x, player_start_y, 50, 50, player_skin)
                 elif "Portal" in entity.tags:
                     entity_fields = {ef.identifier: ef for ef in entity.field_instances}
                     # For now we only link portals within a level
@@ -449,6 +488,9 @@ def main(window):
 
     run = True
     up_key_is_ready = True
+    dimmer = Dimmer()
+    dimmer_counter = 0
+    frozen = False
     while run:
         clock.tick(FPS)
 
@@ -458,24 +500,63 @@ def main(window):
                 break
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE and player.jump_count < 2:
+                if event.key == pygame.K_SPACE and player.jump_count < 2 and not frozen:
                     player.jump()
+                elif event.key == pygame.K_k and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    for heart in player.hearts:
+                        heart.state = 0
 
-        player.loop(FPS)
-        fire.loop()
-        for portal in portals:
-            portal.loop()
-        handle_move(player, objects)
-        if up_key_is_ready:
+        if not frozen:
+            player.loop(FPS)
+            fire.loop()
             for portal in portals:
-                up_key_is_ready,offset_x = portal.check(player,up_key_is_ready,offset_x)
-        else:
-            up_key_is_ready = not pygame.key.get_pressed()[pygame.K_UP]
-        draw(window, background, bg_image, player, objects, offset_x)
+                portal.loop()
+            handle_move(player, objects)
+            if up_key_is_ready:
+                for portal in portals:
+                    up_key_is_ready,offset_x = portal.check(player,up_key_is_ready,offset_x)
+            else:
+                up_key_is_ready = not pygame.key.get_pressed()[pygame.K_UP]
 
-        if ((player.rect.right - offset_x >= WIDTH - scroll_area_width) and player.x_vel > 0) or (
-                (player.rect.left - offset_x <= scroll_area_width) and player.x_vel < 0):
-            offset_x += player.x_vel
+        dimmer_length = 200
+        n_dimmer_levels = 5
+        if player.rect.top > HEIGHT:
+            dimmer_counter += 1
+            alphaval=min((1+dimmer_counter*n_dimmer_levels//dimmer_length)*255//n_dimmer_levels,255)
+            if alphaval != dimmer.darken_factor:
+                dimmer.dim(alphaval)
+            frozen = True
+            if dimmer_counter > dimmer_length:
+                player.rect.x = player_start_x
+                player.rect.y = player_start_y
+                offset_x = 0
+                frozen = False
+                player.add_damage()
+                health = player.get_hp()
+                print(f"Hearts: {health/2}")
+                if health > 0:
+                    dimmer_counter = 0
+        elif player.get_hp() > 0:
+            dimmer.undim()        
+            draw(window, background, bg_image, player, objects, offset_x)
+
+        if player.get_hp() == 0:
+            frozen = True
+            if dimmer_counter <= dimmer_length:
+                dimmer_counter += 1
+                alphaval=min((1+dimmer_counter*n_dimmer_levels//dimmer_length)*255//n_dimmer_levels,255)
+                if alphaval != dimmer.darken_factor:
+                    dimmer.dim(alphaval)
+            else:
+                path=join("assets", "Other", "gameover.jpg")
+                gameover_image=pygame.image.load(path).convert_alpha()
+                window.blit(gameover_image,(300,200))
+                pygame.display.update()
+
+        if not frozen:
+            if ((player.rect.right - offset_x >= WIDTH - scroll_area_width) and player.x_vel > 0) or (
+                    (player.rect.left - offset_x <= scroll_area_width) and player.x_vel < 0):
+                offset_x += player.x_vel
 
     pygame.quit()
     quit()
