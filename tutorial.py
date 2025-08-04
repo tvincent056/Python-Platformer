@@ -169,6 +169,39 @@ class Object(pygame.sprite.Sprite):
     def draw(self, win, offset_x):
         win.blit(self.image, (self.rect.x - offset_x, self.rect.y))
 
+class Heart(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        size=33
+        self.width = size
+        self.height = size
+        self.rect = pygame.Rect(x, y, size, size)
+        self.sprites = []
+        sprite_sheet = pygame.image.load(join("assets", "Other", "hearts.png")).convert_alpha()
+        sheet_size = sprite_sheet.get_height()
+        for i in range(sprite_sheet.get_width() // sheet_size):
+            surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA, 32)
+            rect = pygame.Rect(i * (sheet_size+1), 0, sheet_size, sheet_size)
+            surface.blit(sprite_sheet, (0, 0), rect)
+            self.sprites.append(pygame.transform.smoothscale_by(surface,size/sheet_size))
+
+        self.state = 2 #0 = empty, 1 = half, 2 = full
+
+    def loop(self):
+        self.update_sprite()
+
+    def update_sprite(self):
+
+        sprite_index = 2 - self.state
+        self.sprite = self.sprites[sprite_index]
+        self.update()
+
+    def update(self):
+        self.rect = self.sprite.get_rect(topleft=(self.rect.x, self.rect.y))
+        self.mask = pygame.mask.from_surface(self.sprite)
+
+    def draw(self, win):
+        win.blit(self.sprite, (self.rect.x, self.rect.y))
 
 class Block(Object):
     def __init__(self, x, y, size, type="grass_block"):
