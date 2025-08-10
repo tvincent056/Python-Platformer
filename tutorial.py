@@ -79,6 +79,22 @@ def load_sprite_sheets(dir1, dir2, width, height, direction=False):
 
     return all_sprites
 
+def load_sprite_sheets_from_tilset_def(tileset_defs, width):
+
+    all_sprites = {}
+    for identifier,tsd in tileset_defs.items():
+        sprite_sheet = pygame.image.load(tsd.rel_path).convert_alpha()
+        sprites = []
+        print(f"tsd.tile_grid_size = {tsd.tile_grid_size}")
+        print(f"tsd.c_hei = {tsd.c_hei}")
+        for i in range(tsd.c_wid):
+            surface = pygame.Surface((tsd.tile_grid_size, tsd.c_hei*tsd.tile_grid_size), pygame.SRCALPHA, 32)
+            rect = pygame.Rect(i * tsd.tile_grid_size, 0, tsd.tile_grid_size, tsd.c_hei*tsd.tile_grid_size)
+            surface.blit(sprite_sheet, (0, 0), rect)
+            sprites.append(pygame.transform.scale_by(surface, width/tsd.tile_grid_size))
+        
+        all_sprites[identifier] = sprites
+    return all_sprites
 
 def get_block(size, type="grass_block"):
     path = join("assets", "Terrain", "Terrain.png")
@@ -278,10 +294,15 @@ class Block2(Object):
 
 class Fire(Object):
     ANIMATION_DELAY = 3
+    tileset_defs = {}
 
     def __init__(self, x, y, width, height):
         super().__init__(x, y, width, height, "fire")
-        self.fire = load_sprite_sheets("Traps", "Fire", width, height)
+        print(f"x {x} y {y}")
+        self.fire = load_sprite_sheets_from_tilset_def(Fire.tileset_defs, width)
+        for name,sprites in self.fire.items():
+            print(f"{name}: {len(sprites)}")
+        self.rect = pygame.Rect(x, y, width, height)
         self.image = self.fire["off"][0]
         self.mask = pygame.mask.from_surface(self.image)
         self.animation_count = 0
@@ -420,9 +441,10 @@ def handle_move(player, objects):
     to_check = [collide_left, collide_right, *vertical_collide]
 
     for obj in to_check:
-        if obj and obj.name == "fire":
-            if obj.animation_name == "on":
-                player.make_hit()
+        if obj:
+            if obj.name == "fire":
+                if obj.animation_name == "on":
+                    player.make_hit()
     
 
 def get_pair_portal(entity_ref, level):
@@ -447,6 +469,10 @@ def main(window):
     print(f"N layers: {len(ldtkworld.levels[0].layer_instances)}")
     background, bg_image = get_background("Blue.png")
     tileset_defs = {ts.uid: ts for ts in ldtkworld.defs.tilesets}
+    Fire.tileset_defs["on"] = [tsdef for tsdef in tileset_defs.values() if tsdef.identifier == "Fire_On"][0]
+    Fire.tileset_defs["hit"] = [tsdef for tsdef in tileset_defs.values() if tsdef.identifier == "Fire_Hit"][0]
+    Fire.tileset_defs["off"] = [tsdef for tsdef in tileset_defs.values() if tsdef.identifier == "Fire_Off"][0]
+    EndTrophy.tileset_defs["idle"] = [tsdef for tsdef in tileset_defs.values() if tsdef.identifier == "End_Idle_"][0]
 
     tiles = []
     for layer_instance in ldtkworld.levels[0].layer_instances:
@@ -460,6 +486,7 @@ def main(window):
     player_skin = "GreenMan"
     player = None
     portals = []
+    fires = []
     player_start_x = None
     player_start_y = None
     for layer_instance in ldtkworld.levels[0].layer_instances:
@@ -474,9 +501,11 @@ def main(window):
                     # For now we only link portals within a level
                     portals.append(Portal(entity.px[0]+layer_instance.px_total_offset_x, entity.px[1]+layer_instance.px_total_offset_y,48,48,
                                           get_pair_portal(entity_fields["Entity_ref"].value, ldtkworld.levels[0])))
-
-    fire = Fire(100, HEIGHT - block_size - 64, 16, 32)
-    fire.on()
+                elif "Fire" in entity.tags:
+                    entity_fields = {ef.identifier: ef for ef in entity.field_instances}
+                    fires.append(Fire(entity.px[0]+layer_instance.px_total_offset_x, entity.px[1]+layer_instance.px_total_offset_y,
+                                      entity.width, entity.height))
+                    fires[-1].on()
     # portal = Portal(1000, HEIGHT-2*block_size,48,48)
     # floor = [Block(i * block_size, HEIGHT - block_size, block_size)
     #          for i in range(-WIDTH // block_size, (WIDTH * 2) // block_size)]
@@ -485,7 +514,7 @@ def main(window):
     #            Block(block_size * 5, HEIGHT - block_size * 4, block_size/2, type="redbrick_block"),
             #    fire,
             #    portal]
-    objects = [*tiles, fire, *portals]
+    objects = [*tiles, *fires, *portals]
 
     offset_x = 0
     scroll_area_width = 200
@@ -520,7 +549,8 @@ def main(window):
 
         if not frozen:
             player.loop(FPS)
-            fire.loop()
+            for fire in fires:
+                fire.loop()
             for portal in portals:
                 portal.loop()
             handle_move(player, objects)
