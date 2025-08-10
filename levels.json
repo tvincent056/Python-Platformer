@@ -742,6 +742,65 @@
 			"savedSelections": [],
 			"cachedPixelData": { "opaqueTiles": "00", "averageColors": "0000e865" }
 		},
+		{
+			"__cWid": 1,
+			"__cHei": 1,
+			"identifier": "End_Idle_",
+			"uid": 28,
+			"relPath": "assets/Items/Checkpoints/End/End (Idle).png",
+			"embedAtlas": null,
+			"pxWid": 64,
+			"pxHei": 64,
+			"tileGridSize": 64,
+			"spacing": 0,
+			"padding": 0,
+			"tags": [],
+			"tagsSourceEnumUid": null,
+			"enumTags": [],
+			"customData": [],
+			"savedSelections": [],
+			"cachedPixelData": { "opaqueTiles": "0", "averageColors": "5cb7" }
+		},
+		{
+			"__cWid": 8,
+			"__cHei": 1,
+			"identifier": "End_Pressed_64x64_",
+			"uid": 29,
+			"relPath": "assets/Items/Checkpoints/End/End (Pressed) (64x64).png",
+			"embedAtlas": null,
+			"pxWid": 512,
+			"pxHei": 64,
+			"tileGridSize": 64,
+			"spacing": 0,
+			"padding": 0,
+			"tags": [],
+			"tagsSourceEnumUid": null,
+			"enumTags": [],
+			"customData": [],
+			"savedSelections": [],
+			"cachedPixelData": { "opaqueTiles": "00000000", "averageColors": "4ba74ba74ba75bb75cb75cb75cb75cb7" }
+		},
+		{
+			"__cWid": 34,
+			"__cHei": 2,
+			"identifier": "Strawberry",
+			"uid": 30,
+			"relPath": "assets/Items/Fruits/Strawberry.png",
+			"embedAtlas": null,
+			"pxWid": 544,
+			"pxHei": 32,
+			"tileGridSize": 16,
+			"spacing": 0,
+			"padding": 0,
+			"tags": [],
+			"tagsSourceEnumUid": null,
+			"enumTags": [],
+			"customData": [],
+			"savedSelections": [],
+			"cachedPixelData": {
+				"opaqueTiles": "00000000000000000000000000000000000000000000000000000000000000000000",
+				"averageColors": "1a642a641a642a641a642a641a642a641a642a64196429641a642a541a642a541a642a5419642964196429641964296419642964196429641964296419641964196419641b542b541b542b541b542b541b542b541b542b541a541b541a542b541a542b541a542b541a541b541a541b541b541b541b542b541b542b541b542b541b541b541b541b54"
+			}
 		}
 	], "enums": [], "externalEnums": [], "levelFields": [] },
 	"levels": [
@@ -897,6 +956,22 @@
 							"fieldInstances": [],
 							"__worldX": 144,
 							"__worldY": 656
+						},
+						{
+							"__identifier": "End",
+							"__grid": [303,21],
+							"__pivot": [0,0],
+							"__tags": ["End"],
+							"__tile": { "tilesetUid": 28, "x": 0, "y": 0, "w": 64, "h": 64 },
+							"__smartColor": "#EAD4AA",
+							"iid": "5b895180-5e50-11f0-94db-abcab44abf53",
+							"width": 64,
+							"height": 64,
+							"defUid": 35,
+							"px": [4848,336],
+							"fieldInstances": [],
+							"__worldX": 4848,
+							"__worldY": 336
 						}
 					]
 				},

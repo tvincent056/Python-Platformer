@@ -42,6 +42,7 @@ class Dimmer:
                 self.buffer=None
 
 pygame.init()
+pygame.font.init()
 
 pygame.display.set_caption("Platformer")
 
@@ -327,6 +328,57 @@ class Fire(Object):
         if self.animation_count // self.ANIMATION_DELAY > len(sprites):
             self.animation_count = 0
 
+class EndTrophy(Object):
+    ANIMATION_DELAY = 3
+    tileset_defs = {}
+    win_counter_max = 100
+
+    def __init__(self, x, y, width, height):
+        super().__init__(x, y, width, height, "end")
+        print(f"x {x} y {y}")
+        self.animations = load_sprite_sheets_from_tilset_def(EndTrophy.tileset_defs, width)
+        for name,sprites in self.animations.items():
+            print(f"{name}: {len(sprites)}")
+        self.rect = pygame.Rect(x, y, width, height)
+        self.image = self.animations["idle"][0]
+        # self.mask = pygame.mask.from_surface(self.image)
+        self.mask = pygame.mask.Mask((0,0))
+        self.animation_count = 0
+        self.animation_name = "idle"
+        self.win_counter = -1
+
+    def set_pressed(self):
+        self.animation_name = "pressed"
+
+    def set_idle(self):
+        self.animation_name = "idle"
+
+    def check(self, player):
+        pxbuf_x = 3*player.rect.w//4
+        pxbuf_y = 3*player.rect.h//4
+        if (self.rect.x - pxbuf_x < player.rect.x) and \
+            (self.rect.y - pxbuf_y < player.rect.y) and \
+            (self.rect.x+self.rect.w + pxbuf_x >= player.rect.x + player.rect.w) and \
+            (self.rect.y+self.rect.h + pxbuf_y >= player.rect.y + player.rect.h):
+            self.set_pressed()
+            if self.win_counter < 0:
+                self.win_counter = 0
+
+    def loop(self):
+        sprites = self.animations[self.animation_name]
+        sprite_index = (self.animation_count //
+                        self.ANIMATION_DELAY) % len(sprites)
+        self.image = sprites[sprite_index]
+        self.animation_count += 1
+        if self.win_counter >= 0:
+                self.win_counter += 1
+
+        self.rect = self.image.get_rect(topleft=(self.rect.x, self.rect.y))
+        # self.mask = pygame.mask.from_surface(self.image)
+
+        if self.animation_count // self.ANIMATION_DELAY > len(sprites):
+            self.animation_count = 0
+
 class Portal(Object):
     ANIMATION_DELAY = 6
 
@@ -445,6 +497,8 @@ def handle_move(player, objects):
             if obj.name == "fire":
                 if obj.animation_name == "on":
                     player.make_hit()
+            elif obj.name == "end":
+                obj.check(player)
     
 
 def get_pair_portal(entity_ref, level):
@@ -457,7 +511,6 @@ def get_pair_portal(entity_ref, level):
 
 def main(window):
     clock = pygame.time.Clock()
-    
 
     block_size = 96
 
@@ -473,6 +526,7 @@ def main(window):
     Fire.tileset_defs["hit"] = [tsdef for tsdef in tileset_defs.values() if tsdef.identifier == "Fire_Hit"][0]
     Fire.tileset_defs["off"] = [tsdef for tsdef in tileset_defs.values() if tsdef.identifier == "Fire_Off"][0]
     EndTrophy.tileset_defs["idle"] = [tsdef for tsdef in tileset_defs.values() if tsdef.identifier == "End_Idle_"][0]
+    EndTrophy.tileset_defs["pressed"] = [tsdef for tsdef in tileset_defs.values() if tsdef.identifier == "End_Pressed_64x64_"][0]
 
     tiles = []
     for layer_instance in ldtkworld.levels[0].layer_instances:
@@ -487,6 +541,7 @@ def main(window):
     player = None
     portals = []
     fires = []
+    misc_objects = []
     player_start_x = None
     player_start_y = None
     for layer_instance in ldtkworld.levels[0].layer_instances:
@@ -506,6 +561,12 @@ def main(window):
                     fires.append(Fire(entity.px[0]+layer_instance.px_total_offset_x, entity.px[1]+layer_instance.px_total_offset_y,
                                       entity.width, entity.height))
                     fires[-1].on()
+                elif "End" in entity.tags:
+                    print("Creating End entity")
+                    misc_objects.append(EndTrophy(entity.px[0]+layer_instance.px_total_offset_x, entity.px[1]+layer_instance.px_total_offset_y,
+                                        entity.width, entity.height))
+                    end_trophy = misc_objects[-1]
+
     # portal = Portal(1000, HEIGHT-2*block_size,48,48)
     # floor = [Block(i * block_size, HEIGHT - block_size, block_size)
     #          for i in range(-WIDTH // block_size, (WIDTH * 2) // block_size)]
@@ -514,7 +575,7 @@ def main(window):
     #            Block(block_size * 5, HEIGHT - block_size * 4, block_size/2, type="redbrick_block"),
             #    fire,
             #    portal]
-    objects = [*tiles, *fires, *portals]
+    objects = [*tiles, *fires, *portals, *misc_objects]
 
     offset_x = 0
     scroll_area_width = 200
@@ -524,6 +585,15 @@ def main(window):
     dimmer = Dimmer()
     dimmer_counter = 0
     frozen = False
+    win_font = pygame.font.SysFont('Comic Sans MS', 40)
+    win_font.set_bold(True)
+    textSize = win_font.size('Level Complete!')
+    win_surface = pygame.Surface((textSize[0] + 0, textSize[1] + 0), pygame.SRCALPHA)
+    shadowSurf = win_font.render('Level Complete!', True, (0,0,0))
+    win_font.set_bold(False)
+    textSurf = win_font.render('Level Complete!', True, (255,255,255))
+    win_surface.blit(shadowSurf, (0,0))
+    win_surface.blit(textSurf, (1,1))
     while run:
         clock.tick(FPS)
 
@@ -559,6 +629,12 @@ def main(window):
                     up_key_is_ready,offset_x = portal.check(player,up_key_is_ready,offset_x)
             else:
                 up_key_is_ready = not pygame.key.get_pressed()[pygame.K_UP]
+            end_trophy.check(player)
+            end_trophy.loop()
+        if end_trophy.win_counter > EndTrophy.win_counter_max:
+            frozen = True
+            window.blit(win_surface, (300,200))
+            pygame.display.update()
 
         dimmer_length = 200
         n_dimmer_levels = 5
@@ -578,7 +654,7 @@ def main(window):
                 print(f"Hearts: {health/2}")
                 if health > 0:
                     dimmer_counter = 0
-        elif player.get_hp() > 0:
+        elif player.get_hp() > 0 and not frozen:
             dimmer.undim()        
             draw(window, background, bg_image, player, objects, offset_x)
 
